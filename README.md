@@ -117,12 +117,12 @@ CMD ["nginx", "-g", "daemon off;"]
 Build the Docker Image:
 
 Build the Docker image using the Dockerfile.
-docker build --build-arg REACT_APP_API_BASE_URL=http://192.168.1.250:5001 -t polyglot .
+docker build --build-arg REACT_APP_API_BASE_URL=http://192.168.1.250:5001 -t fluent-front .
 
 Run the Docker Container:
 
 Run the Docker container, mapping port 80 in the container to port 3000 on your host.
-docker run -p 3000:80 polyglot
+docker run -p 3000:80 fluent-front
 Set Environment Variables:
 
 Ensure that the REACT_APP_API_BASE_URL environment variable is set to http://192.168.1.250:5000 when building the Docker image or running the container.
