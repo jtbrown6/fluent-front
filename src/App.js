@@ -5,13 +5,13 @@ import OutputPane from './components/OutputPane';
 import Modal from './components/Modal';
 import './App.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5001';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5200';
 
 function App() {
   const [definitionOutput, setDefinitionOutput] = useState('');
   const [conjugationOutput, setConjugationOutput] = useState('');
   const [assistanceOutput, setAssistanceOutput] = useState('');
-  const [chatOutput, setChatOutput] = useState('');
+  const [chatHistory, setChatHistory] = useState([]);
   const [language, setLanguage] = useState('spanish');
   const [showModal, setShowModal] = useState(false);
   const [selectedText, setSelectedText] = useState('');
@@ -93,7 +93,7 @@ function App() {
 
   const handleChat = async (query) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/question`, {
+      const response = await fetch(`${API_BASE_URL}/api/chatbot`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -101,9 +101,25 @@ function App() {
         body: JSON.stringify({ query }),
       });
       const data = await response.json();
-      setChatOutput(prev => `${prev}\n\n**You:** ${query}\n\n**AI:** ${data.result}`);
+      const newMessage = { role: 'user', content: query };
+      const newResponse = { role: 'assistant', content: data.result };
+      setChatHistory(prevHistory => [...prevHistory, newMessage, newResponse]);
     } catch (error) {
       console.error('Error fetching chat response:', error);
+    }
+  };
+
+  const handleResetConversation = async () => {
+    try {
+      await fetch(`${API_BASE_URL}/api/reset_conversation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      setChatHistory([]);
+    } catch (error) {
+      console.error('Error resetting conversation:', error);
     }
   };
 
@@ -144,7 +160,11 @@ function App() {
         <div className="right-panes">
           <OutputPane title="Definition" content={definitionOutput} defaultOpen={true} />
           <OutputPane title="Conjugation" content={conjugationOutput} defaultOpen={true} />
-          <Chat onSendMessage={handleChat} chatOutput={chatOutput} />
+          <Chat 
+            onSendMessage={handleChat} 
+            chatHistory={chatHistory} 
+            onResetConversation={handleResetConversation}
+          />
         </div>
       </div>
       {showModal && (

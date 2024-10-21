@@ -46,14 +46,16 @@ function Editor({ onHighlight, onGetAssistance, onLanguageChange, onPronounce })
   return (
     <div className="editor">
       <div className="toolbar">
-        <select onChange={(e) => onLanguageChange(e.target.value)} className="language-select">
-          <option value="spanish">Spanish</option>
-          <option value="french">French</option>
-          <option value="portuguese">Portuguese</option>
-        </select>
-        <button onClick={() => handleHighlight('D')} className="action-btn">Define</button>
-        <button onClick={() => handleHighlight('C')} className="action-btn">Conjugate</button>
-        <button onClick={handlePronounce} className="action-btn">Pronounce</button>
+        <div className="toolbar-left">
+          <select onChange={(e) => onLanguageChange(e.target.value)} className="language-select">
+            <option value="spanish">Spanish</option>
+            <option value="french">French</option>
+            <option value="portuguese">Portuguese</option>
+          </select>
+          <button onClick={() => handleHighlight('D')} className="action-btn">Define</button>
+          <button onClick={() => handleHighlight('C')} className="action-btn">Conjugate</button>
+          <button onClick={handlePronounce} className="action-btn">Pronounce</button>
+        </div>
         <button onClick={handleGetAssistance} className="action-btn get-assistance-btn">Get Assistance</button>
       </div>
       <div
