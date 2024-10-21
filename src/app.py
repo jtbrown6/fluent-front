@@ -6,6 +6,7 @@ import json
 from dotenv import load_dotenv
 import logging
 import re
+import threading
 
 load_dotenv()
 
@@ -21,6 +22,16 @@ openai.api_key = os.getenv('OPENAI_API_KEY')  # Ensure you have set this environ
 # @app.route('/')
 # def index():
 #     return render_template('index.html')
+
+
+# How we can handle the in-memory storage for conversations
+# Data Struct: {user_id: { message1, message2, ...}}
+conversation_history = []
+MAX_HISTORY = 3  # Number of user messages to keep
+
+# We are stopping the number of messages for the total tokens sent
+MAX_HISTORY = 3
+
 
 # This handles the "Assist Me" Button
 @app.route('/api/assist', methods=['POST'])
@@ -39,37 +50,7 @@ def assist():
     )
     return jsonify({'result': response.choices[0].message['content'].strip()})
 
-# @app.route('/api/translate_to_spanish', methods=['POST'])
-# def translate_to_spanish():
-#     data = request.json
-#     text = data.get('text', '')
-#     messages = [
-#         {"role": "system", "content": "You are a helpful assistant proficient in translating English to Spanish."},
-#         {"role": "user", "content": f"Translate the following English text to Spanish, considering cultural context:\n\n{text}"}
-#     ]
-#     response = openai.ChatCompletion.create(
-#         model='gpt-4o-mini',
-#         messages=messages,
-#         max_tokens=900,
-#         temperature=0.7,
-#     )
-#     return jsonify({'result': response.choices[0].message['content'].strip()})
 
-# @app.route('/api/translate_to_english', methods=['POST'])
-# def translate_to_english():
-#     data = request.json
-#     text = data.get('text', '')
-#     messages = [
-#         {"role": "system", "content": "You are a helpful assistant proficient in translating Spanish to English."},
-#         {"role": "user", "content": f"Translate the following Spanish text to English, considering cultural context:\n\n{text}"}
-#     ]
-#     response = openai.ChatCompletion.create(
-#         model='gpt-4o-mini',
-#         messages=messages,
-#         max_tokens=900,
-#         temperature=0.7,
-#     )
-#     return jsonify({'result': response.choices[0].message['content'].strip()})
 
 # This handles the conjugate button and table
 @app.route('/api/conjugate', methods=['POST'])
@@ -133,21 +114,123 @@ def define():
     return jsonify({'result': response.choices[0].message['content'].strip()})
 
 # Handles the Popup box Modal questions
-@app.route('/api/question', methods=['POST'])
+# @app.route('/api/question', methods=['POST'])
+# def question():
+#     data = request.json
+#     query = data.get('query', '')
+#     messages = [
+#         {"role": "system", "content": "You are a helpful assistant for Spanish language learning. Consider cultural and situational nuances while assisting."},
+#         {"role": "user", "content": query}
+#     ]
+#     response = openai.ChatCompletion.create(
+#         model='gpt-4o-mini',
+#         messages=messages,
+#         max_tokens=500,
+#         temperature=0.7,
+#     )
+#     return jsonify({'result': response.choices[0].message['content'].strip()})
+
+
+# Handles the Chat Window Feature w/ History 
+SYSTEM_PROMPT = {
+    "role": "system",
+    "content": "You are a helpful assistant for Spanish language learning. Consider cultural and situational nuances while assisting."
+}
+conversation_history.append(SYSTEM_PROMPT.copy())
+
+@app.route('/api/chatbot', methods=['POST'])
 def question():
     data = request.json
-    query = data.get('query', '')
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant for Spanish language learning. Consider cultural and situational nuances while assisting."},
-        {"role": "user", "content": query}
-    ]
-    response = openai.ChatCompletion.create(
+    query = data.get('query', '').strip()
+
+    if not query:
+        logger.debug("Received empty query.")
+        return jsonify({'error': 'Missing or empty query in request'}), 400
+    
+    # Append the user message
+    conversation_history.append({"role": "user", "content": query})
+    logger.debug(f"Appended user message: {query}")
+    
+    # Prune conversation history to keep only the last MAX_HISTORY user messages and their assistant responses
+    # Including system prompt
+    # Find indices of all user messages
+    user_indices = [i for i, msg in enumerate(conversation_history) if msg['role'] == 'user']
+    
+    if len(user_indices) > MAX_HISTORY:
+        # Calculate the index to start keeping messages
+        keep_from = user_indices[-MAX_HISTORY]
+        # Retain system prompt and messages from keep_from onwards
+        pruned_history = [SYSTEM_PROMPT.copy()] + conversation_history[keep_from:]
+        conversation_history[:] = pruned_history
+        logger.debug(f"Pruned conversation history to keep last {MAX_HISTORY} user messages.")
+
+    # Prepare messages to send to OpenAI
+    messages_to_send = conversation_history.copy()
+    logger.debug(f"Messages sent to OpenAI: {json.dumps(messages_to_send, ensure_ascii=False)}")
+
+    try:
+        response = openai.ChatCompletion.create(
         model='gpt-4o-mini',
-        messages=messages,
+        messages=messages_to_send,
         max_tokens=500,
         temperature=0.7,
     )
-    return jsonify({'result': response.choices[0].message['content'].strip()})
+        assistant_message = response.choices[0].message['content'].strip()
+        logger.debug(f"Assistant response: {assistant_message}")
+
+        # Append assistant response to the history
+        conversation_history.append({"role": "assistant", "content": assistant_message})
+        logger.debug("Appended assistant message to conversation history.")   
+
+        
+        return jsonify({'result': assistant_message})
+    except Exception as e:
+        logger.error(f"Error communicating with OpenAI: {str(e)}")
+        return jsonify({'error': 'Failed to get response from assistant', 'details': str(e)}), 500
+
+    # Example endpoint to reset conversation (optional)
+@app.route('/api/reset_conversation', methods=['POST'])
+def reset_conversation():
+    conversation_history.clear()
+    conversation_history.append(SYSTEM_PROMPT.copy())
+    logger.debug("Conversation history has been reset.")
+    return jsonify({'result': 'Conversation history reset successfully'})
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
+
+
+
+
+# @app.route('/api/translate_to_spanish', methods=['POST'])
+# def translate_to_spanish():
+#     data = request.json
+#     text = data.get('text', '')
+#     messages = [
+#         {"role": "system", "content": "You are a helpful assistant proficient in translating English to Spanish."},
+#         {"role": "user", "content": f"Translate the following English text to Spanish, considering cultural context:\n\n{text}"}
+#     ]
+#     response = openai.ChatCompletion.create(
+#         model='gpt-4o-mini',
+#         messages=messages,
+#         max_tokens=900,
+#         temperature=0.7,
+#     )
+#     return jsonify({'result': response.choices[0].message['content'].strip()})
+
+# @app.route('/api/translate_to_english', methods=['POST'])
+# def translate_to_english():
+#     data = request.json
+#     text = data.get('text', '')
+#     messages = [
+#         {"role": "system", "content": "You are a helpful assistant proficient in translating Spanish to English."},
+#         {"role": "user", "content": f"Translate the following Spanish text to English, considering cultural context:\n\n{text}"}
+#     ]
+#     response = openai.ChatCompletion.create(
+#         model='gpt-4o-mini',
+#         messages=messages,
+#         max_tokens=900,
+#         temperature=0.7,
+#     )
+#     return jsonify({'result': response.choices[0].message['content'].strip()})
