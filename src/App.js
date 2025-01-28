@@ -5,7 +5,7 @@ import OutputPane from './components/OutputPane';
 import Modal from './components/Modal';
 import './App.css';
 
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5200';
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
 function App() {
   const [definitionOutput, setDefinitionOutput] = useState('');
@@ -13,8 +13,7 @@ function App() {
   const [assistanceOutput, setAssistanceOutput] = useState('');
   const [chatHistory, setChatHistory] = useState([]);
   const [language, setLanguage] = useState('spanish');
-  const [showModal, setShowModal] = useState(false);
-  const [selectedText, setSelectedText] = useState('');
+  const [pronounceError, setPronounceError] = useState('');
 
   const handleHighlight = async (text, type) => {
     console.log(`Handling ${type} request for:`, text);
@@ -128,20 +127,52 @@ function App() {
   };
 
   const handlePronounce = async (text) => {
-    setSelectedText(text);
-    setShowModal(true);
+    setPronounceError('');
+    
     try {
-      const response = await fetch(`${API_BASE_URL}/pronounce`, {
+      const response = await fetch(`${API_BASE_URL}/api/pronounce`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ text, language }),
+        body: JSON.stringify({ word: text }),
       });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to get pronunciation');
+      }
+      
       const data = await response.json();
       console.log('Pronunciation data:', data);
+      
+      if (data.audio) {
+        // Convert base64 audio content to audio blob
+        const audioData = atob(data.audio);
+        const arrayBuffer = new ArrayBuffer(audioData.length);
+        const uint8Array = new Uint8Array(arrayBuffer);
+        for (let i = 0; i < audioData.length; i++) {
+          uint8Array[i] = audioData.charCodeAt(i);
+        }
+        const audioBlob = new Blob([uint8Array], { type: 'audio/mp3' });
+        const audioUrl = URL.createObjectURL(audioBlob);
+        const audio = new Audio(audioUrl);
+        // Add a slight delay before playing
+        setTimeout(() => {
+          audio.play();
+        }, 500); // 500ms delay
+        
+        // Clean up the URL after playing
+        audio.onended = () => {
+          URL.revokeObjectURL(audioUrl);
+        };
+      }
     } catch (error) {
       console.error('Error fetching pronunciation:', error);
+      const errorMessage = error.message.includes('Audio') 
+        ? 'Text-to-speech service is currently unavailable. Please try again later. The translation service is still working to translate your text.'
+        : error.message;
+      setPronounceError(errorMessage);
     }
   };
 
@@ -167,12 +198,6 @@ function App() {
           />
         </div>
       </div>
-      {showModal && (
-        <Modal onClose={() => setShowModal(false)}>
-          <h2>Pronunciation</h2>
-          <p>Playing pronunciation for: "{selectedText}"</p>
-        </Modal>
-      )}
     </div>
   );
 }
